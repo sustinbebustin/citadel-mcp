@@ -2,8 +2,6 @@
 
 A Model Context Protocol (MCP) server that bundles per-stack documentation tools for coding agents. Currently covers Next.js (App Router, Next.js 16), React, Turborepo, and Supabase guides.
 
-This is a stripped-down fork of the upstream `citadel-mcp` package with no telemetry.
-
 ## Tools
 
 - **`nextjs_docs`** -- Fetch Next.js official documentation by path. App Router on Next.js 16 only; Pages Router paths are rejected. Read the `nextjs-docs://llms-index` resource first to get the correct path.
@@ -17,10 +15,6 @@ This is a stripped-down fork of the upstream `citadel-mcp` package with no telem
 - `react-docs://llms-index` -- Cached React documentation index from `react.dev/llms.txt`.
 - `turborepo-docs://llms-index` -- Cached Turborepo documentation index from `turborepo.dev/llms.txt`.
 - `supabase-docs://guides-index` -- Supabase guides index built from `supabase.com/docs/sitemap.xml`, filtered to `/docs/guides/**` and grouped by category.
-
-## Requirements
-
-- Node.js v20.19+ (latest maintenance LTS)
 
 ## MCP client config
 
