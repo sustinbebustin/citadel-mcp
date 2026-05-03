@@ -31,10 +31,11 @@ jobs:
       - name: Build package
         run: pnpm run build
 
+      - name: Update npm for Trusted Publishing
+        run: npm install -g npm@latest
+
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
 
       - name: Install mcp-publisher
         run: |
