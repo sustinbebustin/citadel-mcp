@@ -18,6 +18,21 @@ A Model Context Protocol (MCP) server that bundles per-stack documentation tools
 
 ## MCP client config
 
+Run the published package directly via `npx`:
+
+```json
+{
+  "mcpServers": {
+    "citadel": {
+      "command": "npx",
+      "args": ["-y", "citadel-mcp"]
+    }
+  }
+}
+```
+
+Or run a local checkout:
+
 ```json
 {
   "mcpServers": {

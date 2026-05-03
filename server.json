@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sustinbebustin/citadel-mcp",
+  "description": "MCP server bundling per-stack documentation tools (Next.js, React, Turborepo, Supabase) for AI coding assistants.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/sustinbebustin/citadel-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "citadel-mcp",
+      "version": "1.0.0",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}
