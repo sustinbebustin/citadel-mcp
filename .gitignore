@@ -1,0 +1,20 @@
+.DS_Store
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+.turbo
+*.tgz
+.claude/settings.local.json
+!.claude/settings.json
+test/e2e/.env
+# private content
+_*.md
+.mcpregistry*
+
+# Test fixtures
+test/fixtures/**/pnpm-lock.yaml
+test/fixtures/**/node_modules/
+test/fixtures/**/.next/
+
+certificates
