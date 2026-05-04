@@ -27,7 +27,7 @@ export const metadata = {
   uri: "<stack>-docs://llms-index",
   name: "<Stack> Documentation Index",
   description:
-    "<Stack> documentation index. You MUST read this resource first to find the correct path, then call <stack>_docs with that path.",
+    "<Stack> documentation index. The agent calls codemode.<stack>_index() first to find the correct path, then calls codemode.<stack>_docs({ path }).",
   mimeType: "text/plain",
 };
 
@@ -63,7 +63,7 @@ export const inputSchema = {
   path: z
     .string()
     .describe(
-      "Documentation path from the index (e.g., '/docs/...'). You MUST get this path from the <stack>-docs://llms-index resource.",
+      "Documentation path (e.g., '/docs/...'). Get valid paths by calling codemode.<stack>_index() first.",
     ),
 };
 
@@ -73,15 +73,12 @@ export const metadata = {
   name: "<stack>_docs",
   description: `Fetch <Stack> documentation by path.
 
-IMPORTANT: You MUST first call \`<stack>_index\` to get the correct path. Do NOT guess paths.
+IMPORTANT: Call codemode.<stack>_index() first to get valid paths. Do NOT guess paths.
 
 Workflow:
-1. Call \`<stack>_index()\` to get the documentation index
-2. Find the relevant path in the index
-3. Call this tool with that exact path
-
-Example:
-  <stack>_docs({ path: "/docs/..." })`,
+1. Call codemode.<stack>_index() to get the documentation index
+2. Find the relevant path(s) in the index
+3. Call codemode.<stack>_docs({ path }) — fan out parallel fetches with Promise.all when looking up multiple docs at once`,
 };
 
 export async function handler({ path }: StackDocsArgs): Promise<string> {
@@ -90,7 +87,7 @@ export async function handler({ path }: StackDocsArgs): Promise<string> {
   if (!path.startsWith("/docs/")) {
     return JSON.stringify({
       error: "OUT_OF_SCOPE",
-      message: `Path "${path}" is out of scope. Read the <stack>-docs://llms-index resource for valid paths.`,
+      message: `Path "${path}" is out of scope. Call codemode.<stack>_index() for valid paths.`,
     });
   }
 
@@ -101,7 +98,7 @@ export async function handler({ path }: StackDocsArgs): Promise<string> {
     if (response.status === 404) {
       return JSON.stringify({
         error: "NOT_FOUND",
-        message: `Documentation not found at path: "${path}". The path may be outdated — re-read the index.`,
+        message: `Documentation not found at path: "${path}". The path may be outdated — call codemode.<stack>_index() to refresh it.`,
       });
     }
     throw new Error(
@@ -123,7 +120,7 @@ A few conventions to follow:
 
 ## 3. Register both in `src/index.ts`
 
-Open `src/index.ts` and add three things:
+Open `src/index.ts` and add four things:
 
 a) Imports near the top, alongside the existing tool/resource imports:
 
@@ -143,7 +140,22 @@ await registerDocsTool(
 );
 ```
 
-c) And the index tool registration:
+c) Add an entry for the new stack to both `indexLoaders` and `stackDocsHandlers`. These wire `docs_search` so it can rank and fan out fetches across your stack alongside the others:
+
+```ts
+const indexLoaders: Record<string, () => Promise<string>> = {
+  // ...existing entries...
+  <stack>: <stack>DocsIndex.handler,
+};
+const stackDocsHandlers: Record<...> = {
+  // ...existing entries...
+  <stack>: (args) => <stack>Docs.handler(args),
+};
+```
+
+Skip this and your stack still works for direct `<stack>_docs` and `<stack>_index` calls but is silently absent from `docs_search` ranking.
+
+d) And the index tool registration:
 
 ```ts
 registerIndexTool(
@@ -155,7 +167,9 @@ registerIndexTool(
 );
 ```
 
-Both names appear automatically in the typed sandbox SDK that ships in the `code` tool description, so the agent will see them on the next session.
+If your upstream's `llms.txt` ships site-relative paths (`/foo.md`, `foo.md`) instead of absolute URLs, also add a base for it to `STACK_RELATIVE_BASE` in `src/tools/docs-search.ts` so `parseLlmsTxt` can reconstruct a presentational URL. Stacks with absolute URLs (Next.js, React) need nothing extra.
+
+The new tool names appear automatically in the typed sandbox SDK that ships in the `code` tool description, so the agent will see them on the next session.
 
 ## 4. Verify
 

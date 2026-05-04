@@ -13,3 +13,5 @@ _*.md
 .mcpregistry*
 
 certificates
+next-devtools-mcp
+.next-docs

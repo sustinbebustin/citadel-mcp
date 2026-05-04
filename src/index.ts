@@ -6,7 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Runtime imports from "@cloudflare/codemode" are unsafe — its index.js
 // transitively imports "cloudflare:workers" which Node cannot resolve.
 // Types are erased at compile time, so `import type` is safe.
-import type { Executor, ExecuteResult } from "@cloudflare/codemode";
+import type { Executor } from "@cloudflare/codemode";
 import { z } from "zod";
 import pkg from "../package.json" with { type: "json" };
 
@@ -14,118 +14,25 @@ import * as nextjsDocs from "./tools/nextjs-docs.js";
 import * as reactDocs from "./tools/react-docs.js";
 import * as turborepoDocs from "./tools/turborepo-docs.js";
 import * as supabaseDocs from "./tools/supabase-docs.js";
+import * as docsSearch from "./tools/docs-search.js";
 
 import * as nextjsDocsLlmsIndex from "./resources/(nextjs-docs)/llms-index.js";
 import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
 import * as turborepoDocsLlmsIndex from "./resources/(turborepo-docs)/llms-index.js";
 import * as supabaseDocsGuidesIndex from "./resources/(supabase-docs)/guides-index.js";
+import * as agentUsage from "./resources/agent-usage.js";
 
-const AsyncFunction: new (...args: string[]) => (
-  ...args: unknown[]
-) => Promise<unknown> = Object.getPrototypeOf(async function () {}).constructor;
-
-type ProviderFn = (...args: unknown[]) => Promise<unknown>;
-type ResolvedProvider = {
-  name: string;
-  fns: Record<string, ProviderFn>;
-  positionalArgs?: boolean;
-};
-
-// codeMcpServer hands the executor MCP CallToolResult wrappers
-// ({ content: [{type:"text", text}], isError? }). Sandbox code expects parsed
-// data and working `try/catch`, so we unwrap and rethrow on isError here.
-type McpLikeResult = {
-  content?: Array<{ type: string; text?: string }>;
-  isError?: boolean;
-};
-function isMcpLike(v: unknown): v is McpLikeResult {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    Array.isArray((v as { content?: unknown }).content)
-  );
-}
-function unwrapMcpResult(result: unknown): unknown {
-  if (!isMcpLike(result)) return result;
-  const firstText = result.content?.find((c) => c.type === "text")?.text ?? "";
-  if (result.isError) throw new Error(firstText || "Tool returned an error");
-  if (firstText === "") return undefined;
-  try {
-    return JSON.parse(firstText);
-  } catch {
-    return firstText;
-  }
-}
-function wrapProviderFns(
-  fns: Record<string, ProviderFn>,
-): Record<string, ProviderFn> {
-  const wrapped: Record<string, ProviderFn> = {};
-  for (const [key, fn] of Object.entries(fns)) {
-    wrapped[key] = async (...args) => unwrapMcpResult(await fn(...args));
-  }
-  return wrapped;
-}
-
-class NodeVMExecutor implements Executor {
-  constructor(private readonly timeoutMs: number = 30_000) {}
-
-  // codemode@0.2.x passes ResolvedProvider[]; older releases passed a flat
-  // Record<string, fn>. Handle both — the flat form is deprecated.
-  async execute(
-    code: string,
-    providersOrFns: ResolvedProvider[] | Record<string, ProviderFn>,
-  ): Promise<ExecuteResult> {
-    const logs: string[] = [];
-    // Sandbox `console` binding shadows the host's `console` so writes from
-    // LLM-generated code never reach process.stdout (owned by StdioServerTransport).
-    const consoleProxy = {
-      log: (...a: unknown[]) =>
-        logs.push(a.map((x) => String(x)).join(" ")),
-      error: (...a: unknown[]) =>
-        logs.push("[err] " + a.map((x) => String(x)).join(" ")),
-      warn: (...a: unknown[]) =>
-        logs.push("[warn] " + a.map((x) => String(x)).join(" ")),
-    };
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const names: string[] = [];
-      const values: unknown[] = [];
-      if (Array.isArray(providersOrFns)) {
-        for (const p of providersOrFns) {
-          names.push(p.name);
-          values.push(wrapProviderFns(p.fns));
-        }
-      } else {
-        names.push("codemode");
-        values.push(wrapProviderFns(providersOrFns));
-      }
-      names.push("console");
-      values.push(consoleProxy);
-
-      const fn = new AsyncFunction(...names, `return await (${code})()`);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(`Execution timed out after ${this.timeoutMs}ms`),
-            ),
-          this.timeoutMs,
-        );
-      });
-      const result = await Promise.race([fn(...values), timeoutPromise]);
-      return { result, logs };
-    } catch (err) {
-      return {
-        result: undefined,
-        error: err instanceof Error ? err.message : String(err),
-        logs,
-      };
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-}
+import {
+  generateCodemodeTypes,
+  buildCodeExample,
+  type JsonSchema,
+  type ToolDescriptor,
+} from "./_internal/generate-codemode-types.js";
+import { expandCodeDescription } from "./_internal/code-description.js";
+import {
+  NodeVMExecutor,
+  type ProviderFn,
+} from "./_internal/executor.js";
 
 type IndexResource = {
   metadata: { uri: string; name: string; description: string };
@@ -150,8 +57,8 @@ function registerIndexTool(
   );
 }
 
-// Output shape returned by every docs tool. Mirroring this in the MCP outputSchema
-// gives the sandbox SDK concrete TS types instead of `unknown`.
+// Output shape returned by every per-stack docs tool. Mirroring this in the
+// MCP outputSchema gives the sandbox SDK concrete TS types instead of `unknown`.
 const docResultSchema = {
   path: z.string(),
   url: z.string().optional(),
@@ -161,18 +68,34 @@ const docResultSchema = {
   message: z.string().optional(),
 };
 
+const docsSearchOutputSchema = {
+  matches: z.array(
+    z.object({
+      stack: z.string(),
+      path: z.string(),
+      url: z.string(),
+      title: z.string(),
+      description: z.string().optional(),
+      score: z.number(),
+      content: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  ),
+};
+
 async function registerDocsTool<Args>(
   server: McpServer,
   metadata: { name: string; description: string },
   inputSchema: Record<string, z.ZodTypeAny>,
   handler: (args: Args) => Promise<string>,
+  outputSchema: Record<string, z.ZodTypeAny> = docResultSchema,
 ): Promise<void> {
   server.registerTool(
     metadata.name,
     {
       description: metadata.description,
       inputSchema,
-      outputSchema: docResultSchema,
+      outputSchema,
     },
     async (args: unknown) => {
       const text = await handler(args as Args);
@@ -216,6 +139,44 @@ async function createUpstream(): Promise<McpServer> {
     supabaseDocs.handler,
   );
 
+  const indexLoaders: Record<string, () => Promise<string>> = {
+    nextjs: nextjsDocsLlmsIndex.handler,
+    react: reactDocsLlmsIndex.handler,
+    turborepo: turborepoDocsLlmsIndex.handler,
+    supabase: supabaseDocsGuidesIndex.handler,
+  };
+  const stackDocsHandlers: Record<
+    string,
+    (args: { path: string }) => Promise<string>
+  > = {
+    nextjs: (args) => nextjsDocs.handler(args),
+    react: (args) => reactDocs.handler(args),
+    turborepo: (args) => turborepoDocs.handler(args),
+    supabase: (args) => supabaseDocs.handler(args),
+  };
+  const knownStacks = Object.keys(indexLoaders);
+
+  await registerDocsTool(
+    server,
+    docsSearch.metadata,
+    docsSearch.inputSchema,
+    async (args: Parameters<typeof docsSearch.handler>[0]) =>
+      docsSearch.handler(args, {
+        loadIndex: async (stack) => {
+          const loader = indexLoaders[stack];
+          if (!loader) throw new Error(`Unknown stack: ${stack}`);
+          return loader();
+        },
+        fetchDoc: async (stack, path) => {
+          const fn = stackDocsHandlers[stack];
+          if (!fn) throw new Error(`Unknown stack: ${stack}`);
+          return fn({ path });
+        },
+        knownStacks,
+      }),
+    docsSearchOutputSchema,
+  );
+
   registerIndexTool(
     server,
     "nextjs_index",
@@ -248,138 +209,15 @@ async function createUpstream(): Promise<McpServer> {
   return server;
 }
 
-// Identical to codemode@0.2.2 codeMcpServer() prompt body so LLM behavior
-// is unchanged; the {{types}} placeholder receives types built from BOTH
-// inputSchema AND outputSchema (codeMcpServer drops outputSchema).
-const CODE_DESCRIPTION = `Execute code to achieve a goal.
-
-Available:
-{{types}}
-
-Write an async arrow function in JavaScript that returns the result.
-Do NOT use TypeScript syntax — no type annotations, interfaces, or generics.
-Do NOT define named functions then call them — just write the arrow function body directly.
-
-{{example}}`;
-
-const JS_RESERVED = new Set([
-  "break", "case", "catch", "class", "const", "continue", "debugger",
-  "default", "delete", "do", "else", "enum", "export", "extends", "false",
-  "finally", "for", "function", "if", "import", "in", "instanceof", "new",
-  "null", "return", "super", "switch", "this", "throw", "true", "try",
-  "typeof", "var", "void", "while", "with", "yield",
-]);
-function sanitizeToolName(name: string): string {
-  if (!name) return "_";
-  let s = name.replace(/[-.\s]/g, "_").replace(/[^a-zA-Z0-9_$]/g, "");
-  if (!s) return "_";
-  if (/^[0-9]/.test(s)) s = "_" + s;
-  if (JS_RESERVED.has(s)) s = s + "_";
-  return s;
-}
-function toPascalCase(s: string): string {
-  return s
-    .replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-    .replace(/^[a-z]/, (c) => c.toUpperCase());
-}
-
-type JsonSchema = {
-  type?: string | string[];
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
-  description?: string;
-  items?: JsonSchema;
-  anyOf?: JsonSchema[];
-  oneOf?: JsonSchema[];
-  enum?: unknown[];
-};
-function jsonSchemaToTs(schema: JsonSchema | undefined, indent = ""): string {
-  if (!schema || typeof schema !== "object") return "unknown";
-  if (schema.anyOf) return schema.anyOf.map((s) => jsonSchemaToTs(s, indent)).join(" | ");
-  if (schema.oneOf) return schema.oneOf.map((s) => jsonSchemaToTs(s, indent)).join(" | ");
-  if (schema.enum && schema.enum.length > 0) {
-    return schema.enum
-      .map((v) => (v === null ? "null" : typeof v === "string" ? JSON.stringify(v) : String(v)))
-      .join(" | ");
-  }
-  const t = schema.type;
-  if (Array.isArray(t)) {
-    return t.map((primitive) => primitiveToTs(primitive)).join(" | ");
-  }
-  if (t === "object" || schema.properties) {
-    const props = schema.properties ?? {};
-    const required = new Set(schema.required ?? []);
-    const inner = "  " + indent;
-    const lines: string[] = [];
-    for (const [key, value] of Object.entries(props)) {
-      const desc = value.description
-        ? `${inner}/** ${value.description.replace(/\*\//g, "*\\/")} */\n`
-        : "";
-      const opt = required.has(key) ? "" : "?";
-      lines.push(`${desc}${inner}${key}${opt}: ${jsonSchemaToTs(value, inner)};`);
-    }
-    if (lines.length === 0) return "Record<string, never>";
-    return `{\n${lines.join("\n")}\n${indent}}`;
-  }
-  if (t === "array") return `${jsonSchemaToTs(schema.items, indent)}[]`;
-  return primitiveToTs(t);
-}
-function primitiveToTs(t: string | undefined): string {
-  if (t === "string") return "string";
-  if (t === "number" || t === "integer") return "number";
-  if (t === "boolean") return "boolean";
-  if (t === "null") return "null";
-  return "unknown";
-}
-
-type ToolDescriptor = {
-  name: string;
-  description?: string;
-  inputSchema: JsonSchema;
-  outputSchema?: JsonSchema;
-};
-function generateCodemodeTypes(tools: ReadonlyArray<ToolDescriptor>): string {
-  const types: string[] = [];
-  const methods: string[] = [];
-  for (const tool of tools) {
-    const safe = sanitizeToolName(tool.name);
-    const typeName = toPascalCase(safe);
-    const inputType = jsonSchemaToTs(tool.inputSchema);
-    const outputType = tool.outputSchema ? jsonSchemaToTs(tool.outputSchema) : "unknown";
-    types.push(`type ${typeName}Input = ${inputType};`);
-    types.push(`type ${typeName}Output = ${outputType};`);
-    const docLines: string[] = [];
-    if (tool.description?.trim()) {
-      docLines.push(tool.description.trim().replace(/\r?\n/g, " "));
-    }
-    const props = tool.inputSchema?.properties ?? {};
-    for (const [key, value] of Object.entries(props)) {
-      if (value.description) {
-        docLines.push(`@param input.${key} - ${value.description.replace(/\r?\n/g, " ")}`);
-      }
-    }
-    const jsdoc = docLines.length
-      ? `  /**\n${docLines.map((l) => `   * ${l.replace(/\*\//g, "*\\/")}`).join("\n")}\n   */\n`
-      : "";
-    methods.push(`${jsdoc}  ${safe}: (input: ${typeName}Input) => Promise<${typeName}Output>;`);
-  }
-  return `${types.join("\n")}\n\ndeclare const codemode: {\n${methods.join("\n")}\n};`;
-}
-
-function buildCodeExample(tools: ReadonlyArray<ToolDescriptor>): string {
-  const first = tools[0];
-  if (!first) return "";
-  const props = first.inputSchema?.properties ?? {};
-  const parts: string[] = [];
-  for (const [key, prop] of Object.entries(props)) {
-    const t = prop.type;
-    if (t === "number" || t === "integer") parts.push(`${key}: 0`);
-    else if (t === "boolean") parts.push(`${key}: true`);
-    else parts.push(`${key}: "..."`);
-  }
-  const args = parts.length > 0 ? `{ ${parts.join(", ")} }` : "{}";
-  return `Example: async () => { const r = await codemode.${sanitizeToolName(first.name)}(${args}); return r; }`;
-}
+const SERVER_INSTRUCTIONS = [
+  "Citadel exposes one tool, `code`. Write a single `async () => { ... }` per turn that calls the `codemode.*` SDK; the server runs it in a local Node sandbox.",
+  "",
+  "Prefer `codemode.docs_search({ query, stacks?, fetch: true })` — one call returns ranked matches with markdown attached. Fall back to `codemode.<stack>_index()` + `codemode.<stack>_docs({ path })` for fine-grained filtering. Read the index before fetching; paths must be exact.",
+  "",
+  "A single doc can be 30+ KB — slice/summarize in-sandbox and return only what's needed. Branch on `r.error` before reading `r.content`.",
+  "",
+  "Read resource `citadel://docs/agent-usage` for the full playbook.",
+].join("\n");
 
 function formatResultText(result: unknown): string {
   if (typeof result === "string") return result;
@@ -415,13 +253,33 @@ async function buildCodeServer(
         arguments: args as Record<string, unknown> | undefined,
       });
   }
-  const types = generateCodemodeTypes(descriptors);
-  const description = CODE_DESCRIPTION.replace("{{types}}", types).replace(
-    "{{example}}",
-    buildCodeExample(descriptors),
-  );
+  const description = expandCodeDescription({
+    types: generateCodemodeTypes(descriptors),
+    example: buildCodeExample(descriptors),
+  });
 
-  const code = new McpServer({ name: "citadel-mcp", version: pkg.version });
+  const code = new McpServer(
+    { name: "citadel-mcp", version: pkg.version },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
+  code.registerResource(
+    agentUsage.metadata.name,
+    agentUsage.metadata.uri,
+    {
+      title: agentUsage.metadata.title,
+      description: agentUsage.metadata.description,
+      mimeType: agentUsage.metadata.mimeType,
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: agentUsage.metadata.mimeType,
+          text: await agentUsage.handler(),
+        },
+      ],
+    }),
+  );
   code.registerTool(
     "code",
     {
