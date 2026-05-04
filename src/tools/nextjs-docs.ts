@@ -5,7 +5,7 @@ export const inputSchema = {
   path: z
     .string()
     .describe(
-      "Documentation path (e.g., '/docs/app/api-reference/functions/refresh'). Get valid paths by calling codemode.nextjs_index() first. App Router only — Pages Router paths ('/docs/pages/...') are not supported.",
+      "Documentation path (e.g., '/docs/app/api-reference/functions/refresh'). Do NOT include a '.md' suffix — the tool appends it. Get valid paths by calling codemode.nextjs_index() first. App Router only — Pages Router paths ('/docs/pages/...') are not supported.",
     ),
   anchor: z
     .string()
@@ -36,6 +36,13 @@ export async function handler({
   path,
   anchor,
 }: NextjsDocsArgs): Promise<string> {
+  if (!path.startsWith("/docs/")) {
+    return JSON.stringify({
+      error: "OUT_OF_SCOPE",
+      message: `Path "${path}" is out of scope. The Citadel Next.js docs tool covers /docs/** only. Call codemode.nextjs_index() and select a path that starts with "/docs/app/".`,
+    });
+  }
+
   if (path.startsWith("/docs/pages/")) {
     return JSON.stringify({
       error: "PAGES_ROUTER_NOT_SUPPORTED",
@@ -43,12 +50,9 @@ export async function handler({
     });
   }
 
-  const url = `https://nextjs.org${path}`;
-  const response = await fetch(url, {
-    headers: {
-      Accept: "text/markdown",
-    },
-  });
+  const normalized = path.endsWith(".md") ? path : `${path}.md`;
+  const url = `https://nextjs.org${normalized}`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     if (response.status === 404) {
