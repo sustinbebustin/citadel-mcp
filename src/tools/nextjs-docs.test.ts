@@ -70,6 +70,39 @@ describe("nextjs_docs handler", () => {
     await expect(handler({ path: "/docs/app/foo" })).rejects.toThrow(/500/);
   });
 
+  test("strips trailing slash before appending .md", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("body", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handler({ path: "/docs/app/foo/" });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://nextjs.org/docs/app/foo.md");
+  });
+
+  test("strips fragment before appending .md", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("body", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handler({ path: "/docs/app/foo#section" });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://nextjs.org/docs/app/foo.md");
+  });
+
+  test("strips query string before appending .md", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("body", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handler({ path: "/docs/app/foo?x=1" });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://nextjs.org/docs/app/foo.md");
+  });
+
   test("strips YAML frontmatter from the response body", async () => {
     vi.stubGlobal(
       "fetch",

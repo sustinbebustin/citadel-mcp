@@ -33,7 +33,8 @@ export async function handler({ path }: SupabaseDocsArgs): Promise<string> {
     });
   }
 
-  const normalized = path.endsWith(".md") ? path : `${path}.md`;
+  const cleaned = path.replace(/[#?].*$/, "").replace(/\/+$/, "");
+  const normalized = cleaned.endsWith(".md") ? cleaned : `${cleaned}.md`;
   const url = `https://supabase.com${normalized}`;
   const response = await fetch(url);
 

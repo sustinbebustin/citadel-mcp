@@ -50,7 +50,8 @@ export async function handler({
     });
   }
 
-  const normalized = path.endsWith(".md") ? path : `${path}.md`;
+  const cleaned = path.replace(/[#?].*$/, "").replace(/\/+$/, "");
+  const normalized = cleaned.endsWith(".md") ? cleaned : `${cleaned}.md`;
   const url = `https://nextjs.org${normalized}`;
   const response = await fetch(url);
 
