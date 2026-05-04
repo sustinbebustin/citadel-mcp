@@ -14,6 +14,7 @@ import * as nextjsDocs from "./tools/nextjs-docs.js";
 import * as reactDocs from "./tools/react-docs.js";
 import * as turborepoDocs from "./tools/turborepo-docs.js";
 import * as supabaseDocs from "./tools/supabase-docs.js";
+import * as docsSearch from "./tools/docs-search.js";
 
 import * as nextjsDocsLlmsIndex from "./resources/(nextjs-docs)/llms-index.js";
 import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
@@ -55,8 +56,8 @@ function registerIndexTool(
   );
 }
 
-// Output shape returned by every docs tool. Mirroring this in the MCP outputSchema
-// gives the sandbox SDK concrete TS types instead of `unknown`.
+// Output shape returned by every per-stack docs tool. Mirroring this in the
+// MCP outputSchema gives the sandbox SDK concrete TS types instead of `unknown`.
 const docResultSchema = {
   path: z.string(),
   url: z.string().optional(),
@@ -66,18 +67,34 @@ const docResultSchema = {
   message: z.string().optional(),
 };
 
+const docsSearchOutputSchema = {
+  matches: z.array(
+    z.object({
+      stack: z.string(),
+      path: z.string(),
+      url: z.string(),
+      title: z.string(),
+      description: z.string().optional(),
+      score: z.number(),
+      content: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  ),
+};
+
 async function registerDocsTool<Args>(
   server: McpServer,
   metadata: { name: string; description: string },
   inputSchema: Record<string, z.ZodTypeAny>,
   handler: (args: Args) => Promise<string>,
+  outputSchema: Record<string, z.ZodTypeAny> = docResultSchema,
 ): Promise<void> {
   server.registerTool(
     metadata.name,
     {
       description: metadata.description,
       inputSchema,
-      outputSchema: docResultSchema,
+      outputSchema,
     },
     async (args: unknown) => {
       const text = await handler(args as Args);
@@ -119,6 +136,44 @@ async function createUpstream(): Promise<McpServer> {
     supabaseDocs.metadata,
     supabaseDocs.inputSchema,
     supabaseDocs.handler,
+  );
+
+  const indexLoaders: Record<string, () => Promise<string>> = {
+    nextjs: nextjsDocsLlmsIndex.handler,
+    react: reactDocsLlmsIndex.handler,
+    turborepo: turborepoDocsLlmsIndex.handler,
+    supabase: supabaseDocsGuidesIndex.handler,
+  };
+  const stackDocsHandlers: Record<
+    string,
+    (args: { path: string }) => Promise<string>
+  > = {
+    nextjs: (args) => nextjsDocs.handler(args),
+    react: (args) => reactDocs.handler(args),
+    turborepo: (args) => turborepoDocs.handler(args),
+    supabase: (args) => supabaseDocs.handler(args),
+  };
+  const knownStacks = Object.keys(indexLoaders);
+
+  await registerDocsTool(
+    server,
+    docsSearch.metadata,
+    docsSearch.inputSchema,
+    async (args: Parameters<typeof docsSearch.handler>[0]) =>
+      docsSearch.handler(args, {
+        loadIndex: async (stack) => {
+          const loader = indexLoaders[stack];
+          if (!loader) throw new Error(`Unknown stack: ${stack}`);
+          return loader();
+        },
+        fetchDoc: async (stack, path) => {
+          const fn = stackDocsHandlers[stack];
+          if (!fn) throw new Error(`Unknown stack: ${stack}`);
+          return fn({ path });
+        },
+        knownStacks,
+      }),
+    docsSearchOutputSchema,
   );
 
   registerIndexTool(

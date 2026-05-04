@@ -31,11 +31,16 @@ Hard rules for the function itself:
 
 ## Sandbox SDK
 
-Eight functions are reachable. The exact input/output types live in the `code` tool description; treat the list below as orientation.
+The exact input/output types live in the `code` tool description; treat the list below as orientation.
+
+**Cross-stack search** — the one-call shortcut:
+- `codemode.docs_search({ query, stacks?, limit?, fetch? })` — BM25 ranked search across registered indexes. With `fetch: true` the server fans out doc fetches in parallel and attaches `.content` to each match. One MCP call yields ranked results with full markdown.
+
+**Per-stack tools** — when you already know the stack and want raw access:
 
 | Stack | Index call | Docs call | Notes |
 |---|---|---|---|
-| Next.js | `codemode.nextjs_index()` | `codemode.nextjs_docs({ path, anchor? })` | App Router, Next.js 16 only. Pages Router paths (`/docs/pages/...`) are rejected. |
+| Next.js | `codemode.nextjs_index()` | `codemode.nextjs_docs({ path, anchor? })` | App Router, Next.js 16 only. Pages Router paths (`/docs/pages/...`) are rejected. Do not include `.md` — the tool appends it. |
 | React | `codemode.react_index()` | `codemode.react_docs({ path })` | Paths include the `.md` suffix as listed in the index. |
 | Turborepo | `codemode.turborepo_index()` | `codemode.turborepo_docs({ path })` | Paths are relative to `/docs/` (e.g., `/reference/run.md`). |
 | Supabase | `codemode.supabase_index()` | `codemode.supabase_docs({ path })` | Scoped to `/docs/guides/**` only. Do not include `.md` — the tool appends it. |
@@ -63,6 +68,31 @@ If `error` is set, `content` is missing — branch on `r.error` before reading `
 4. Return the data you need. Don't return more than the user actually needs — see "Return only what's needed" below.
 
 ## Patterns
+
+### Cross-stack search — the one-call shortcut
+
+When the question spans more than one stack ("how does caching work in Next.js and React?"), or when you don't know which stack has the answer, `docs_search` collapses the whole workflow into one MCP call.
+
+```js
+async () => {
+  const r = await codemode.docs_search({
+    query: "caching",
+    stacks: ["nextjs", "react"], // omit to search every registered stack
+    limit: 5,
+    fetch: true,                 // server fans out parallel doc fetches
+  });
+  // r.matches: [{ stack, path, url, title, description?, score, content?, error? }]
+  return r.matches.map((m) => ({
+    stack: m.stack,
+    title: m.title,
+    head: m.content?.slice(0, 400),
+  }));
+}
+```
+
+When `fetch: false` (or omitted), you get ranked paths only — useful when you want to inspect the index hits before deciding what to fetch. The handler degrades gracefully if any individual fetch fails: that match comes back with an `error` field instead of `content`.
+
+Reach for `docs_search` first; fall back to direct `*_index()` + `*_docs()` only when you need bespoke filtering the BM25 ranker can't express (e.g. "all paths under `/docs/app/api-reference/functions/`").
 
 ### Parallel fan-out — the entire reason this tool exists
 
