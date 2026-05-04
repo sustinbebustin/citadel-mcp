@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sustinbebustin/citadel-mcp",
-  "description": "MCP server bundling per-stack documentation tools for coding agents.",
+  "description": "A growing Citadel of stack-specific docs, served as MCP tools for AI coding agents.",
   "version": "1.0.1",
   "repository": {
     "url": "https://github.com/sustinbebustin/citadel-mcp",
