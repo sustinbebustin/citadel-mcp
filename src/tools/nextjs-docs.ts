@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stripDocChrome } from "../_internal/strip-doc-chrome.js";
 
 export const inputSchema = {
   path: z
@@ -64,7 +65,7 @@ export async function handler({
     );
   }
 
-  const markdown = await response.text();
+  const markdown = stripDocChrome(await response.text());
   return JSON.stringify({
     path,
     anchor: anchor || null,
