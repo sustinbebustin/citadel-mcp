@@ -54,6 +54,15 @@ Workflow:
 
 const LLMS_LINE = /^- \[([^\]]+)\]\(([^)]+)\)(?::\s*(.+))?$/;
 
+// Some llms.txt sources ship site-root-relative paths (e.g. Turborepo's
+// `/index.md`, `/guides/foo.md`) instead of absolute URLs. The per-stack
+// fetch handler is the source of truth for how a path resolves against
+// its host; this map only exists to reconstruct a presentational `url`
+// for the index row.
+const STACK_RELATIVE_BASE: Record<string, string> = {
+  turborepo: "https://turborepo.dev/docs",
+};
+
 export function parseLlmsTxt(text: string, stack: string): IndexRow[] {
   const rows: IndexRow[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -61,12 +70,18 @@ export function parseLlmsTxt(text: string, stack: string): IndexRow[] {
     if (!trimmed.startsWith("- [")) continue;
     const match = LLMS_LINE.exec(trimmed);
     if (!match) continue;
-    const [, title, url, description] = match;
+    const [, title, rawUrl, description] = match;
     let path: string;
+    let url: string;
     try {
-      path = new URL(url).pathname;
+      const u = new URL(rawUrl);
+      path = u.pathname;
+      url = rawUrl;
     } catch {
-      continue;
+      const base = STACK_RELATIVE_BASE[stack];
+      if (!base || !rawUrl || rawUrl.includes("://")) continue;
+      path = rawUrl.startsWith("/") ? rawUrl : `/${rawUrl}`;
+      url = `${base}${path}`;
     }
     rows.push({
       stack,
@@ -157,8 +172,21 @@ export async function handler(
       ranked.map(async (m): Promise<Match> => {
         try {
           const raw = await fetcher(m.stack, m.path);
-          const parsed = JSON.parse(raw) as { content?: string };
-          return parsed.content ? { ...m, content: parsed.content } : m;
+          const parsed = JSON.parse(raw) as {
+            content?: string;
+            error?: string;
+            message?: string;
+          };
+          if (parsed.content) return { ...m, content: parsed.content };
+          if (parsed.error) {
+            return {
+              ...m,
+              error: parsed.message
+                ? `${parsed.error}: ${parsed.message}`
+                : parsed.error,
+            };
+          }
+          return m;
         } catch (err) {
           return {
             ...m,

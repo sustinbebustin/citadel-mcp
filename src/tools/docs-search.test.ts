@@ -59,6 +59,32 @@ describe("parseLlmsTxt", () => {
     expect(rows[0].url).toBe("https://react.dev/learn/caching.md");
     expect(rows[0].path).toBe("/learn/caching.md");
   });
+
+  test("preserves turborepo relative entries by resolving them under /docs/", () => {
+    // Turborepo's llms.txt ships site-relative paths like `/index.md` and
+    // `index.md`. Without relative-URL handling, every row gets dropped.
+    const llms = [
+      "- [Introduction](index.md): Get started.",
+      "- [Acknowledgements](/acknowledgments.md)",
+      "- [Docker guide](/guides/tools/docker.md): Docker tips.",
+    ].join("\n");
+    const rows = parseLlmsTxt(llms, "turborepo");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toEqual({
+      stack: "turborepo",
+      path: "/index.md",
+      url: "https://turborepo.dev/docs/index.md",
+      title: "Introduction",
+      description: "Get started.",
+    });
+    expect(rows[1].path).toBe("/acknowledgments.md");
+    expect(rows[2].url).toBe("https://turborepo.dev/docs/guides/tools/docker.md");
+  });
+
+  test("drops relative entries for stacks without a known base", () => {
+    const llms = "- [Bare](relative-only.md): no base for unknown stack.";
+    expect(parseLlmsTxt(llms, "unknown-stack")).toEqual([]);
+  });
 });
 
 describe("parseSupabaseIndex", () => {
@@ -184,6 +210,33 @@ describe("docs_search handler", () => {
     const withContent = result.matches.filter((m: { content?: string }) => m.content);
     expect(withContent.length).toBeGreaterThan(0);
     expect(withContent[0].content).toContain("body of nextjs");
+  });
+
+  test("surfaces structured handler errors (e.g. NOT_FOUND) on the match", async () => {
+    const fetchDoc = vi.fn().mockImplementation((_stack: string, path: string) =>
+      path.includes("invalidation")
+        ? Promise.resolve(
+            JSON.stringify({
+              error: "NOT_FOUND",
+              message: `Documentation not found at path: "${path}".`,
+            }),
+          )
+        : Promise.resolve(
+            JSON.stringify({ path, url: `u${path}`, content: "ok" }),
+          ),
+    );
+
+    const raw = await handler(
+      { query: "caching", stacks: ["nextjs"], limit: 2, fetch: true },
+      { loadIndex, fetchDoc },
+    );
+    const result = JSON.parse(raw);
+
+    const errored = result.matches.find((m: { error?: string }) => m.error);
+    expect(errored).toBeDefined();
+    expect(errored.error).toMatch(/NOT_FOUND/);
+    expect(errored.error).toMatch(/Documentation not found/);
+    expect(errored.content).toBeUndefined();
   });
 
   test("attaches a per-match error and continues when one fetch fails", async () => {
