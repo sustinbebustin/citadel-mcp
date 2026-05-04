@@ -1,7 +1,7 @@
 {
   "name": "citadel-mcp",
   "version": "1.0.1",
-  "description": "MCP server bundling per-stack documentation tools for coding agents.",
+  "description": "A growing Citadel of stack-specific docs, served as Codemode MCP tools for AI coding agents.",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "bin": {
@@ -31,12 +31,15 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.24.3",
+    "@cloudflare/codemode": "^0.2.2",
+    "@modelcontextprotocol/sdk": "^1.25.0",
+    "ai": "^6.0.0",
     "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",
     "prettier": "3.3.3",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.2"
   }
 }

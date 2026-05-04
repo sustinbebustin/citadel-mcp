@@ -1,62 +1,62 @@
 # Citadel MCP
 
-A Model Context Protocol (MCP) server that bundles per-stack documentation tools for coding agents. Currently covers Next.js (App Router, Next.js 16), React, Turborepo, and Supabase guides.
+A Code Mode MCP server that gives AI coding agents curated, per-stack documentation as typed tools.
 
-## Tools
+Citadel is built to be **forked and tailored**. The hosted package ships with a small starter set of stacks, but the real value comes from packaging the docs your agents actually need. Each stack is a tiny module — adding one is mostly mechanical.
 
-- **`nextjs_docs`** -- Fetch Next.js official documentation by path. App Router on Next.js 16 only; Pages Router paths are rejected. Read the `nextjs-docs://llms-index` resource first to get the correct path.
-- **`react_docs`** -- Fetch React official documentation by path. Read the `react-docs://llms-index` resource first to get the correct path.
-- **`turborepo_docs`** -- Fetch Turborepo official documentation by path. Read the `turborepo-docs://llms-index` resource first to get the correct path.
-- **`supabase_docs`** -- Fetch a Supabase guide by path. Scoped to `/docs/guides/**` content. Read the `supabase-docs://guides-index` resource first to get the correct path.
+## Install (hosted)
 
-## Resources
+Project-scoped:
 
-- `nextjs-docs://llms-index` -- Cached Next.js documentation index from `nextjs.org/docs/llms.txt` (App Router, Next.js 16).
-- `react-docs://llms-index` -- Cached React documentation index from `react.dev/llms.txt`.
-- `turborepo-docs://llms-index` -- Cached Turborepo documentation index from `turborepo.dev/llms.txt`.
-- `supabase-docs://guides-index` -- Supabase guides index built from `supabase.com/docs/sitemap.xml`, filtered to `/docs/guides/**` and grouped by category.
-
-## MCP client config
-
-Run the published package directly via `npx`:
-
-```json
-{
-  "mcpServers": {
-    "citadel": {
-      "command": "npx",
-      "args": ["-y", "citadel-mcp"]
-    }
-  }
-}
+```bash
+claude mcp add -s project citadel -- npx -y citadel-mcp@latest
 ```
 
-Or run a local checkout:
+Globally for your user:
 
-```json
-{
-  "mcpServers": {
-    "citadel": {
-      "command": "node",
-      "args": ["/absolute/path/to/citadel-mcp/dist/index.js"]
-    }
-  }
-}
+```bash
+claude mcp add -s user citadel -- npx -y citadel-mcp@latest
 ```
 
-## Local development
+Restart Claude Code, then verify with `claude mcp list`. A working server advertises a single tool named `code`.
+
+## What you get out of the box
+
+The hosted package includes a starter set of stacks so you can try it immediately:
+
+- Next.js (App Router, Next.js 16)
+- React
+- Turborepo
+- Supabase guides
+
+This list is intentionally small. **For the best results, fork this repo and add the stacks your agents care about** — your internal libraries, the framework version you actually use, or any docs site that publishes machine-readable markdown. See [docs/adding-a-docs-tool.md](docs/adding-a-docs-tool.md).
+
+## How it works
+
+Citadel is a Code Mode server: instead of advertising one tool per docs source, it advertises a single `code` tool. The agent writes one `async () => { ... }` per turn that calls `codemode.<stack>_docs(...)` and `codemode.<stack>_index()` directly, and the server runs that code in a local Node sandbox. N doc fetches collapse into one round-trip.
+
+Each stack contributes two callable tools to the sandbox SDK:
+
+- `<stack>_index()` — returns the doc index so the agent can pick a valid path
+- `<stack>_docs({ path })` — fetches that specific doc as markdown
+
+## Run from a local checkout
 
 ```bash
 pnpm install
 pnpm build
-pnpm typecheck
+claude mcp add -s user citadel-dev -- node /absolute/path/to/citadel-mcp/dist/index.js
 ```
 
-The server entry point is `dist/index.js`. Run it directly over stdio for smoke testing:
+For development with auto-reload:
 
 ```bash
-node dist/index.js
+claude mcp add -s user citadel-dev -- npx tsx /absolute/path/to/citadel-mcp/src/index.ts
 ```
+
+## Documentation
+
+- [Adding a docs tool](docs/adding-a-docs-tool.md) — package a new stack as `<stack>_index` + `<stack>_docs`
 
 ## License
 
