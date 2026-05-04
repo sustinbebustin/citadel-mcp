@@ -27,8 +27,8 @@ describe("CODE_DESCRIPTION", () => {
     expect(CODE_DESCRIPTION).toMatch(/30s|30 second/i);
   });
 
-  test("points at docs/agent-usage.md for deeper patterns", () => {
-    expect(CODE_DESCRIPTION).toMatch(/docs\/agent-usage\.md/);
+  test("points at the agent-usage MCP resource for deeper patterns", () => {
+    expect(CODE_DESCRIPTION).toMatch(/citadel:\/\/docs\/agent-usage/);
   });
 });
 

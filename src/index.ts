@@ -20,6 +20,7 @@ import * as nextjsDocsLlmsIndex from "./resources/(nextjs-docs)/llms-index.js";
 import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
 import * as turborepoDocsLlmsIndex from "./resources/(turborepo-docs)/llms-index.js";
 import * as supabaseDocsGuidesIndex from "./resources/(supabase-docs)/guides-index.js";
+import * as agentUsage from "./resources/agent-usage.js";
 
 import {
   generateCodemodeTypes,
@@ -208,6 +209,16 @@ async function createUpstream(): Promise<McpServer> {
   return server;
 }
 
+const SERVER_INSTRUCTIONS = [
+  "Citadel exposes one tool, `code`. Write a single `async () => { ... }` per turn that calls the `codemode.*` SDK; the server runs it in a local Node sandbox.",
+  "",
+  "Prefer `codemode.docs_search({ query, stacks?, fetch: true })` — one call returns ranked matches with markdown attached. Fall back to `codemode.<stack>_index()` + `codemode.<stack>_docs({ path })` for fine-grained filtering. Read the index before fetching; paths must be exact.",
+  "",
+  "A single doc can be 30+ KB — slice/summarize in-sandbox and return only what's needed. Branch on `r.error` before reading `r.content`.",
+  "",
+  "Read resource `citadel://docs/agent-usage` for the full playbook.",
+].join("\n");
+
 function formatResultText(result: unknown): string {
   if (typeof result === "string") return result;
   return JSON.stringify(result, null, 2) ?? "undefined";
@@ -247,7 +258,28 @@ async function buildCodeServer(
     example: buildCodeExample(descriptors),
   });
 
-  const code = new McpServer({ name: "citadel-mcp", version: pkg.version });
+  const code = new McpServer(
+    { name: "citadel-mcp", version: pkg.version },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
+  code.registerResource(
+    agentUsage.metadata.name,
+    agentUsage.metadata.uri,
+    {
+      title: agentUsage.metadata.title,
+      description: agentUsage.metadata.description,
+      mimeType: agentUsage.metadata.mimeType,
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: agentUsage.metadata.mimeType,
+          text: await agentUsage.handler(),
+        },
+      ],
+    }),
+  );
   code.registerTool(
     "code",
     {

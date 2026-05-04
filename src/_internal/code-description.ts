@@ -6,7 +6,7 @@ export const CODE_DESCRIPTION = `Run JavaScript in a local Node sandbox. Write O
 Inside the sandbox you have:
   - codemode.<tool_name>(args) — calls an MCP tool over the wire. Each codemode.* method below is a real callable.
   - fetch, Promise, JSON, standard async — Node 18+ globals.
-  - 30s execution budget. No filesystem, no streaming.
+  - 30s async timeout (sync infinite loops are not bounded). One call, one result; no streaming.
 
 Fan out independent calls with Promise.all — that is why this tool exists. N tool calls collapse into one MCP round-trip.
 
@@ -16,7 +16,7 @@ Available tools:
 Example (parallel cross-stack survey, the common case):
 {{example}}
 
-Return the value the caller needs. If you console.log, output is captured in a [logs] block alongside the result. For deeper patterns see docs/agent-usage.md in the citadel-mcp repo.`;
+Return the value the caller needs. If you console.log, output is captured in a [logs] block alongside the result. For deeper patterns read the MCP resource \`citadel://docs/agent-usage\`.`;
 
 export function expandCodeDescription(params: {
   types: string;
