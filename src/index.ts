@@ -20,6 +20,14 @@ import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
 import * as turborepoDocsLlmsIndex from "./resources/(turborepo-docs)/llms-index.js";
 import * as supabaseDocsGuidesIndex from "./resources/(supabase-docs)/guides-index.js";
 
+import {
+  generateCodemodeTypes,
+  buildCodeExample,
+  type JsonSchema,
+  type ToolDescriptor,
+} from "./_internal/generate-codemode-types.js";
+import { expandCodeDescription } from "./_internal/code-description.js";
+
 const AsyncFunction: new (...args: string[]) => (
   ...args: unknown[]
 ) => Promise<unknown> = Object.getPrototypeOf(async function () {}).constructor;
@@ -248,140 +256,6 @@ async function createUpstream(): Promise<McpServer> {
   return server;
 }
 
-// Identical to codemode@0.2.2 codeMcpServer() prompt body so LLM behavior
-// is unchanged; the {{types}} placeholder receives types built from BOTH
-// inputSchema AND outputSchema (codeMcpServer drops outputSchema).
-const CODE_DESCRIPTION = `Execute code to achieve a goal.
-
-Available:
-{{types}}
-
-Write an async arrow function in JavaScript that returns the result.
-Do NOT use TypeScript syntax — no type annotations, interfaces, or generics.
-Do NOT define named functions then call them — just write the arrow function body directly.
-When fetching multiple docs, call them concurrently with Promise.all — that is the entire reason this tool exists. Each doc fetch happens in one round-trip regardless of how many you batch.
-
-{{example}}`;
-
-const JS_RESERVED = new Set([
-  "break", "case", "catch", "class", "const", "continue", "debugger",
-  "default", "delete", "do", "else", "enum", "export", "extends", "false",
-  "finally", "for", "function", "if", "import", "in", "instanceof", "new",
-  "null", "return", "super", "switch", "this", "throw", "true", "try",
-  "typeof", "var", "void", "while", "with", "yield",
-]);
-function sanitizeToolName(name: string): string {
-  if (!name) return "_";
-  let s = name.replace(/[-.\s]/g, "_").replace(/[^a-zA-Z0-9_$]/g, "");
-  if (!s) return "_";
-  if (/^[0-9]/.test(s)) s = "_" + s;
-  if (JS_RESERVED.has(s)) s = s + "_";
-  return s;
-}
-function toPascalCase(s: string): string {
-  return s
-    .replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-    .replace(/^[a-z]/, (c) => c.toUpperCase());
-}
-
-type JsonSchema = {
-  type?: string | string[];
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
-  description?: string;
-  items?: JsonSchema;
-  anyOf?: JsonSchema[];
-  oneOf?: JsonSchema[];
-  enum?: unknown[];
-};
-function jsonSchemaToTs(schema: JsonSchema | undefined, indent = ""): string {
-  if (!schema || typeof schema !== "object") return "unknown";
-  if (schema.anyOf) return schema.anyOf.map((s) => jsonSchemaToTs(s, indent)).join(" | ");
-  if (schema.oneOf) return schema.oneOf.map((s) => jsonSchemaToTs(s, indent)).join(" | ");
-  if (schema.enum && schema.enum.length > 0) {
-    return schema.enum
-      .map((v) => (v === null ? "null" : typeof v === "string" ? JSON.stringify(v) : String(v)))
-      .join(" | ");
-  }
-  const t = schema.type;
-  if (Array.isArray(t)) {
-    return t.map((primitive) => primitiveToTs(primitive)).join(" | ");
-  }
-  if (t === "object" || schema.properties) {
-    const props = schema.properties ?? {};
-    const required = new Set(schema.required ?? []);
-    const inner = "  " + indent;
-    const lines: string[] = [];
-    for (const [key, value] of Object.entries(props)) {
-      const desc = value.description
-        ? `${inner}/** ${value.description.replace(/\*\//g, "*\\/")} */\n`
-        : "";
-      const opt = required.has(key) ? "" : "?";
-      lines.push(`${desc}${inner}${key}${opt}: ${jsonSchemaToTs(value, inner)};`);
-    }
-    if (lines.length === 0) return "Record<string, never>";
-    return `{\n${lines.join("\n")}\n${indent}}`;
-  }
-  if (t === "array") return `${jsonSchemaToTs(schema.items, indent)}[]`;
-  return primitiveToTs(t);
-}
-function primitiveToTs(t: string | undefined): string {
-  if (t === "string") return "string";
-  if (t === "number" || t === "integer") return "number";
-  if (t === "boolean") return "boolean";
-  if (t === "null") return "null";
-  return "unknown";
-}
-
-type ToolDescriptor = {
-  name: string;
-  description?: string;
-  inputSchema: JsonSchema;
-  outputSchema?: JsonSchema;
-};
-function generateCodemodeTypes(tools: ReadonlyArray<ToolDescriptor>): string {
-  const types: string[] = [];
-  const methods: string[] = [];
-  for (const tool of tools) {
-    const safe = sanitizeToolName(tool.name);
-    const typeName = toPascalCase(safe);
-    const inputType = jsonSchemaToTs(tool.inputSchema);
-    const outputType = tool.outputSchema ? jsonSchemaToTs(tool.outputSchema) : "unknown";
-    types.push(`type ${typeName}Input = ${inputType};`);
-    types.push(`type ${typeName}Output = ${outputType};`);
-    const docLines: string[] = [];
-    if (tool.description?.trim()) {
-      docLines.push(tool.description.trim().replace(/\r?\n/g, " "));
-    }
-    const props = tool.inputSchema?.properties ?? {};
-    for (const [key, value] of Object.entries(props)) {
-      if (value.description) {
-        docLines.push(`@param input.${key} - ${value.description.replace(/\r?\n/g, " ")}`);
-      }
-    }
-    const jsdoc = docLines.length
-      ? `  /**\n${docLines.map((l) => `   * ${l.replace(/\*\//g, "*\\/")}`).join("\n")}\n   */\n`
-      : "";
-    methods.push(`${jsdoc}  ${safe}: (input: ${typeName}Input) => Promise<${typeName}Output>;`);
-  }
-  return `${types.join("\n")}\n\ndeclare const codemode: {\n${methods.join("\n")}\n};`;
-}
-
-function buildCodeExample(tools: ReadonlyArray<ToolDescriptor>): string {
-  const first = tools[0];
-  if (!first) return "";
-  const props = first.inputSchema?.properties ?? {};
-  const parts: string[] = [];
-  for (const [key, prop] of Object.entries(props)) {
-    const t = prop.type;
-    if (t === "number" || t === "integer") parts.push(`${key}: 0`);
-    else if (t === "boolean") parts.push(`${key}: true`);
-    else parts.push(`${key}: "..."`);
-  }
-  const args = parts.length > 0 ? `{ ${parts.join(", ")} }` : "{}";
-  return `Example: async () => { const r = await codemode.${sanitizeToolName(first.name)}(${args}); return r; }`;
-}
-
 function formatResultText(result: unknown): string {
   if (typeof result === "string") return result;
   return JSON.stringify(result, null, 2) ?? "undefined";
@@ -416,11 +290,10 @@ async function buildCodeServer(
         arguments: args as Record<string, unknown> | undefined,
       });
   }
-  const types = generateCodemodeTypes(descriptors);
-  const description = CODE_DESCRIPTION.replace("{{types}}", types).replace(
-    "{{example}}",
-    buildCodeExample(descriptors),
-  );
+  const description = expandCodeDescription({
+    types: generateCodemodeTypes(descriptors),
+    example: buildCodeExample(descriptors),
+  });
 
   const code = new McpServer({ name: "citadel-mcp", version: pkg.version });
   code.registerTool(
