@@ -6,7 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Runtime imports from "@cloudflare/codemode" are unsafe — its index.js
 // transitively imports "cloudflare:workers" which Node cannot resolve.
 // Types are erased at compile time, so `import type` is safe.
-import type { Executor, ExecuteResult } from "@cloudflare/codemode";
+import type { Executor } from "@cloudflare/codemode";
 import { z } from "zod";
 import pkg from "../package.json" with { type: "json" };
 
@@ -27,113 +27,10 @@ import {
   type ToolDescriptor,
 } from "./_internal/generate-codemode-types.js";
 import { expandCodeDescription } from "./_internal/code-description.js";
-
-const AsyncFunction: new (...args: string[]) => (
-  ...args: unknown[]
-) => Promise<unknown> = Object.getPrototypeOf(async function () {}).constructor;
-
-type ProviderFn = (...args: unknown[]) => Promise<unknown>;
-type ResolvedProvider = {
-  name: string;
-  fns: Record<string, ProviderFn>;
-  positionalArgs?: boolean;
-};
-
-// codeMcpServer hands the executor MCP CallToolResult wrappers
-// ({ content: [{type:"text", text}], isError? }). Sandbox code expects parsed
-// data and working `try/catch`, so we unwrap and rethrow on isError here.
-type McpLikeResult = {
-  content?: Array<{ type: string; text?: string }>;
-  isError?: boolean;
-};
-function isMcpLike(v: unknown): v is McpLikeResult {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    Array.isArray((v as { content?: unknown }).content)
-  );
-}
-function unwrapMcpResult(result: unknown): unknown {
-  if (!isMcpLike(result)) return result;
-  const firstText = result.content?.find((c) => c.type === "text")?.text ?? "";
-  if (result.isError) throw new Error(firstText || "Tool returned an error");
-  if (firstText === "") return undefined;
-  try {
-    return JSON.parse(firstText);
-  } catch {
-    return firstText;
-  }
-}
-function wrapProviderFns(
-  fns: Record<string, ProviderFn>,
-): Record<string, ProviderFn> {
-  const wrapped: Record<string, ProviderFn> = {};
-  for (const [key, fn] of Object.entries(fns)) {
-    wrapped[key] = async (...args) => unwrapMcpResult(await fn(...args));
-  }
-  return wrapped;
-}
-
-class NodeVMExecutor implements Executor {
-  constructor(private readonly timeoutMs: number = 30_000) {}
-
-  // codemode@0.2.x passes ResolvedProvider[]; older releases passed a flat
-  // Record<string, fn>. Handle both — the flat form is deprecated.
-  async execute(
-    code: string,
-    providersOrFns: ResolvedProvider[] | Record<string, ProviderFn>,
-  ): Promise<ExecuteResult> {
-    const logs: string[] = [];
-    // Sandbox `console` binding shadows the host's `console` so writes from
-    // LLM-generated code never reach process.stdout (owned by StdioServerTransport).
-    const consoleProxy = {
-      log: (...a: unknown[]) =>
-        logs.push(a.map((x) => String(x)).join(" ")),
-      error: (...a: unknown[]) =>
-        logs.push("[err] " + a.map((x) => String(x)).join(" ")),
-      warn: (...a: unknown[]) =>
-        logs.push("[warn] " + a.map((x) => String(x)).join(" ")),
-    };
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const names: string[] = [];
-      const values: unknown[] = [];
-      if (Array.isArray(providersOrFns)) {
-        for (const p of providersOrFns) {
-          names.push(p.name);
-          values.push(wrapProviderFns(p.fns));
-        }
-      } else {
-        names.push("codemode");
-        values.push(wrapProviderFns(providersOrFns));
-      }
-      names.push("console");
-      values.push(consoleProxy);
-
-      const fn = new AsyncFunction(...names, `return await (${code})()`);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(`Execution timed out after ${this.timeoutMs}ms`),
-            ),
-          this.timeoutMs,
-        );
-      });
-      const result = await Promise.race([fn(...values), timeoutPromise]);
-      return { result, logs };
-    } catch (err) {
-      return {
-        result: undefined,
-        error: err instanceof Error ? err.message : String(err),
-        logs,
-      };
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-}
+import {
+  NodeVMExecutor,
+  type ProviderFn,
+} from "./_internal/executor.js";
 
 type IndexResource = {
   metadata: { uri: string; name: string; description: string };
