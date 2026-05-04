@@ -27,7 +27,7 @@ export const metadata = {
   uri: "<stack>-docs://llms-index",
   name: "<Stack> Documentation Index",
   description:
-    "<Stack> documentation index. You MUST read this resource first to find the correct path, then call <stack>_docs with that path.",
+    "<Stack> documentation index. The agent calls codemode.<stack>_index() first to find the correct path, then calls codemode.<stack>_docs({ path }).",
   mimeType: "text/plain",
 };
 
@@ -63,7 +63,7 @@ export const inputSchema = {
   path: z
     .string()
     .describe(
-      "Documentation path from the index (e.g., '/docs/...'). You MUST get this path from the <stack>-docs://llms-index resource.",
+      "Documentation path (e.g., '/docs/...'). Get valid paths by calling codemode.<stack>_index() first.",
     ),
 };
 
@@ -73,15 +73,12 @@ export const metadata = {
   name: "<stack>_docs",
   description: `Fetch <Stack> documentation by path.
 
-IMPORTANT: You MUST first call \`<stack>_index\` to get the correct path. Do NOT guess paths.
+IMPORTANT: Call codemode.<stack>_index() first to get valid paths. Do NOT guess paths.
 
 Workflow:
-1. Call \`<stack>_index()\` to get the documentation index
-2. Find the relevant path in the index
-3. Call this tool with that exact path
-
-Example:
-  <stack>_docs({ path: "/docs/..." })`,
+1. Call codemode.<stack>_index() to get the documentation index
+2. Find the relevant path(s) in the index
+3. Call codemode.<stack>_docs({ path }) — fan out parallel fetches with Promise.all when looking up multiple docs at once`,
 };
 
 export async function handler({ path }: StackDocsArgs): Promise<string> {
@@ -90,7 +87,7 @@ export async function handler({ path }: StackDocsArgs): Promise<string> {
   if (!path.startsWith("/docs/")) {
     return JSON.stringify({
       error: "OUT_OF_SCOPE",
-      message: `Path "${path}" is out of scope. Read the <stack>-docs://llms-index resource for valid paths.`,
+      message: `Path "${path}" is out of scope. Call codemode.<stack>_index() for valid paths.`,
     });
   }
 
@@ -101,7 +98,7 @@ export async function handler({ path }: StackDocsArgs): Promise<string> {
     if (response.status === 404) {
       return JSON.stringify({
         error: "NOT_FOUND",
-        message: `Documentation not found at path: "${path}". The path may be outdated — re-read the index.`,
+        message: `Documentation not found at path: "${path}". The path may be outdated — call codemode.<stack>_index() to refresh it.`,
       });
     }
     throw new Error(

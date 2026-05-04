@@ -259,6 +259,7 @@ Available:
 Write an async arrow function in JavaScript that returns the result.
 Do NOT use TypeScript syntax — no type annotations, interfaces, or generics.
 Do NOT define named functions then call them — just write the arrow function body directly.
+When fetching multiple docs, call them concurrently with Promise.all — that is the entire reason this tool exists. Each doc fetch happens in one round-trip regardless of how many you batch.
 
 {{example}}`;
 

@@ -56,6 +56,7 @@ claude mcp add -s user citadel-dev -- npx tsx /absolute/path/to/citadel-mcp/src/
 
 ## Documentation
 
+- [Using Citadel as an AI agent](docs/agent-usage.md) — playbook for the `code` tool: SDK reference, parallel fan-out, error handling, worked examples
 - [Adding a docs tool](docs/adding-a-docs-tool.md) — package a new stack as `<stack>_index` + `<stack>_docs`
 
 ## License

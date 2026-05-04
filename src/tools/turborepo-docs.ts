@@ -5,7 +5,7 @@ export const inputSchema = {
   path: z
     .string()
     .describe(
-      "Documentation path as listed in the llms.txt index (e.g., '/guides/tools/docker.md', '/reference/run.md', or 'index.md'). Paths in the index are relative to '/docs/'; this tool resolves them under turborepo.dev/docs/. You MUST get this path from the turborepo-docs://llms-index resource.",
+      "Documentation path (e.g., '/guides/tools/docker.md', '/reference/run.md', or 'index.md'). Paths are relative to '/docs/'; the tool resolves them under turborepo.dev/docs/. Get valid paths by calling codemode.turborepo_index() first.",
     ),
 };
 
@@ -17,15 +17,12 @@ export const metadata = {
   name: "turborepo_docs",
   description: `Fetch Turborepo official documentation by path.
 
-IMPORTANT: You MUST first read the \`turborepo-docs://llms-index\` MCP resource to get the correct path. Do NOT guess paths.
+IMPORTANT: Call codemode.turborepo_index() first to get valid paths. Do NOT guess paths.
 
 Workflow:
-1. Read the \`turborepo-docs://llms-index\` resource to get the documentation index
-2. Find the relevant path in the index for what you're looking for (paths include the .md suffix)
-3. Call this tool with that exact path
-
-Example:
-  turborepo_docs({ path: "/guides/tools/docker.md" })`,
+1. Call codemode.turborepo_index() to get the documentation index
+2. Find the relevant path(s) in the index (paths include the .md suffix)
+3. Call codemode.turborepo_docs({ path }) — fan out parallel fetches with Promise.all when looking up multiple docs at once`,
 };
 
 export async function handler({ path }: TurborepoDocsArgs): Promise<string> {
@@ -37,7 +34,7 @@ export async function handler({ path }: TurborepoDocsArgs): Promise<string> {
     if (response.status === 404) {
       return JSON.stringify({
         error: "NOT_FOUND",
-        message: `Documentation not found at path: "${path}". This path may be outdated. Please read the \`turborepo-docs://llms-index\` resource to find the current correct path.`,
+        message: `Documentation not found at path: "${path}". This path may be outdated. Call codemode.turborepo_index() to find the current correct path.`,
       });
     }
     throw new Error(
