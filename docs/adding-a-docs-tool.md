@@ -120,7 +120,7 @@ A few conventions to follow:
 
 ## 3. Register both in `src/index.ts`
 
-Open `src/index.ts` and add three things:
+Open `src/index.ts` and add four things:
 
 a) Imports near the top, alongside the existing tool/resource imports:
 
@@ -140,7 +140,22 @@ await registerDocsTool(
 );
 ```
 
-c) And the index tool registration:
+c) Add an entry for the new stack to both `indexLoaders` and `stackDocsHandlers`. These wire `docs_search` so it can rank and fan out fetches across your stack alongside the others:
+
+```ts
+const indexLoaders: Record<string, () => Promise<string>> = {
+  // ...existing entries...
+  <stack>: <stack>DocsIndex.handler,
+};
+const stackDocsHandlers: Record<...> = {
+  // ...existing entries...
+  <stack>: (args) => <stack>Docs.handler(args),
+};
+```
+
+Skip this and your stack still works for direct `<stack>_docs` and `<stack>_index` calls but is silently absent from `docs_search` ranking.
+
+d) And the index tool registration:
 
 ```ts
 registerIndexTool(
@@ -152,7 +167,9 @@ registerIndexTool(
 );
 ```
 
-Both names appear automatically in the typed sandbox SDK that ships in the `code` tool description, so the agent will see them on the next session.
+If your upstream's `llms.txt` ships site-relative paths (`/foo.md`, `foo.md`) instead of absolute URLs, also add a base for it to `STACK_RELATIVE_BASE` in `src/tools/docs-search.ts` so `parseLlmsTxt` can reconstruct a presentational URL. Stacks with absolute URLs (Next.js, React) need nothing extra.
+
+The new tool names appear automatically in the typed sandbox SDK that ships in the `code` tool description, so the agent will see them on the next session.
 
 ## 4. Verify
 
