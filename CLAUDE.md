@@ -4,7 +4,7 @@ Operating context for Claude Code in this repo.
 
 ## What this is
 
-Citadel is a Code Mode MCP server. It advertises one tool — `code` — whose description embeds TS signatures for every upstream docs tool. The agent writes one `async () => { ... }` per turn that calls `codemode.<tool>(args)`; the server runs it in a local Node sandbox. N doc fetches collapse into one round-trip.
+Citadel is a Code Mode MCP server. It advertises one tool — `docs` — whose description embeds TS signatures for every upstream docs tool. The agent writes one `async () => { ... }` per turn that calls `codemode.<tool>(args)`; the server runs it in a local Node sandbox. N doc fetches collapse into one round-trip.
 
 ## Layout
 

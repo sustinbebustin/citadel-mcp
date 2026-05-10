@@ -1,4 +1,4 @@
-// Generates the TypeScript declarations the LLM reads inside the `code`
+// Generates the TypeScript declarations the LLM reads inside the `docs`
 // tool description. Pure: takes upstream tool descriptors, returns a
 // string containing `type {Name}Input/Output` aliases and a
 // `declare const codemode` block with method signatures.

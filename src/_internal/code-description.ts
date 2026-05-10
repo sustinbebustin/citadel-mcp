@@ -1,4 +1,4 @@
-// The static preamble for the `code` tool description. The two
+// The static preamble for the `docs` tool description. The two
 // placeholders are filled in at server startup with the generated SDK
 // types and a concrete example matching the registered tools.
 export const CODE_DESCRIPTION = `Run JavaScript in a local Node sandbox. Write ONE async arrow function that returns a value.

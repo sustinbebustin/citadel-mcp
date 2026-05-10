@@ -3,26 +3,26 @@ export const metadata = {
   name: "agent-usage",
   title: "Citadel Agent Usage Guide",
   description:
-    "Full playbook for writing `code` calls against the Citadel codemode SDK: workflow, parallel fan-out patterns, error handling, common mistakes. Read once before your first `code` call.",
+    "Full playbook for writing `docs` calls against the Citadel codemode SDK: workflow, parallel fan-out patterns, error handling, common mistakes. Read once before your first `docs` call.",
   mimeType: "text/markdown",
 } as const;
 
 const AGENT_USAGE_MD = `# Using Citadel as an AI Agent
 
-You have access to one MCP tool, \`code\`. Its description embeds a TypeScript SDK named \`codemode\` covering every doc source Citadel ships. To fetch documentation, you write **one** async arrow function per turn that calls the SDK; the server runs it in a local Node sandbox and returns the result. N doc fetches collapse into one round-trip.
+You have access to one MCP tool, \`docs\`. Its description embeds a TypeScript SDK named \`codemode\` covering every doc source Citadel ships. To fetch documentation, you write **one** async arrow function per turn that calls the SDK; the server runs it in a local Node sandbox and returns the result. N doc fetches collapse into one round-trip.
 
 This guide is a playbook. Read it before your first call.
 
 ## Mental model
 
-- The \`code\` tool takes a string of JavaScript and returns whatever your function returns.
+- The \`docs\` tool takes a string of JavaScript and returns whatever your function returns.
 - Inside the sandbox, \`codemode.<name>(args)\` calls the upstream tool by name. It already returns parsed JSON — you do not unwrap MCP envelopes.
 - A \`*_index()\` call returns the raw markdown index for a stack. A \`*_docs({ path })\` call returns \`{ path, url, content }\` for that specific doc.
 - You discover paths by reading the index. **Never guess paths** — they fail with 404 and waste a round-trip.
 
 ## Anatomy of a call
 
-The \`code\` argument is a single async arrow function as a string. The outer wrapping (\`(async () => { ... })()\`) is added for you, so write the function literal directly:
+The \`code\` argument to the \`docs\` tool is a single async arrow function as a string. The outer wrapping (\`(async () => { ... })()\`) is added for you, so write the function literal directly:
 
 \`\`\`js
 async () => {
@@ -40,7 +40,7 @@ Hard rules for the function itself:
 
 ## Sandbox SDK
 
-The exact input/output types live in the \`code\` tool description; treat the list below as orientation.
+The exact input/output types live in the \`docs\` tool description; treat the list below as orientation.
 
 **Cross-stack search** — the one-call shortcut:
 - \`codemode.docs_search({ query, stacks?, limit?, fetch? })\` — BM25 ranked search across registered indexes. With \`fetch: true\` the server fans out doc fetches in parallel and attaches \`.content\` to each match. One MCP call yields ranked results with full markdown.
@@ -219,7 +219,7 @@ async () => {
 
 - **30-second async timeout.** If your function (or any tool call inside it) is still pending after 30s, you get an \`Execution timed out after 30000ms\` error. The timeout is enforced via \`Promise.race\`, so a synchronous infinite loop is *not* bounded — don't write one.
 - **Soft sandbox.** The executor is a Node \`AsyncFunction\`, not a vm context. Host globals (\`fetch\`, \`process\`, \`setTimeout\`, \`node:fs\`) are technically reachable, but the contract is the \`codemode.*\` SDK — stay on it. \`console.log\` / \`error\` / \`warn\` are shadowed and routed to the \`[logs]\` block. If your task needs a capability Citadel does not expose, ask for that capability to be added rather than reaching into the host.
-- **No streaming.** A \`code\` call is one request and one response. If you need progressive results, return them in batches across multiple calls.
+- **No streaming.** A \`docs\` call is one request and one response. If you need progressive results, return them in batches across multiple calls.
 - **Payload truncation.** There is currently no enforced cap on response size, but the host conversation has its own limits. Be deliberate about what you return.
 
 ## Common mistakes
@@ -322,7 +322,7 @@ async () => {
 - **A different MCP server covers the topic better.** If the user has Context7 or a vendor-specific MCP installed, prefer those for vendors Citadel doesn't ship.
 - **You only need one fact.** If you genuinely need exactly one paragraph from one doc, do call it — but return only what was asked, not the full doc.
 
-If you're about to make multiple calls in sequence, stop and ask whether they could be one \`code\` call with \`Promise.all\`. The answer is almost always yes.
+If you're about to make multiple calls in sequence, stop and ask whether they could be one \`docs\` call with \`Promise.all\`. The answer is almost always yes.
 `;
 
 export function handler(): Promise<string> {

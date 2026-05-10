@@ -1,6 +1,6 @@
 # Adding a docs tool
 
-This guide walks through packaging a new stack — call it `<stack>` — as a Citadel docs tool. When you're done, the agent will be able to call `codemode.<stack>_index()` and `codemode.<stack>_docs({ path })` from inside the `code` sandbox.
+This guide walks through packaging a new stack — call it `<stack>` — as a Citadel docs tool. When you're done, the agent will be able to call `codemode.<stack>_index()` and `codemode.<stack>_docs({ path })` from inside the `docs` sandbox.
 
 A docs tool is two small modules plus three lines of registration. The existing stacks in `src/tools/` and `src/resources/` are the canonical reference — copy whichever one is closest to your source's shape.
 
@@ -49,7 +49,7 @@ export const handler = createCachedTextResource({
 
 See `src/resources/(supabase-docs)/guides-index.ts` for a working sitemap transform.
 
-The `uri` in `metadata` is retained for clarity; it is no longer routed via MCP resources. Citadel exposes index resources as no-arg tools (`<stack>_index`) so they're reachable from inside the `code` sandbox.
+The `uri` in `metadata` is retained for clarity; it is no longer routed via MCP resources. Citadel exposes index resources as no-arg tools (`<stack>_index`) so they're reachable from inside the `docs` sandbox.
 
 ## 2. Add the fetch tool
 
@@ -169,7 +169,7 @@ registerIndexTool(
 
 If your upstream's `llms.txt` ships site-relative paths (`/foo.md`, `foo.md`) instead of absolute URLs, also add a base for it to `STACK_RELATIVE_BASE` in `src/tools/docs-search.ts` so `parseLlmsTxt` can reconstruct a presentational URL. Stacks with absolute URLs (Next.js, React) need nothing extra.
 
-The new tool names appear automatically in the typed sandbox SDK that ships in the `code` tool description, so the agent will see them on the next session.
+The new tool names appear automatically in the typed sandbox SDK that ships in the `docs` tool description, so the agent will see them on the next session.
 
 ## 4. Verify
 

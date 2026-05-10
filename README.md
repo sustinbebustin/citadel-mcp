@@ -67,7 +67,7 @@ Use the Claude Code CLI to add the Citadel MCP server:
 claude mcp add -s user citadel -- npx -y citadel-mcp@latest
 ```
 
-Use `-s project` instead of `-s user` to scope the install to the current project. Restart Claude Code, then verify with `claude mcp list`. A working server advertises a single tool named `code`.
+Use `-s project` instead of `-s user` to scope the install to the current project. Restart Claude Code, then verify with `claude mcp list`. A working server advertises a single tool named `docs`.
 
 </details>
 
@@ -150,7 +150,7 @@ This list is intentionally small. **For the best results, fork this repo and add
 
 ## How it works
 
-Citadel is a Code Mode server: instead of advertising one tool per docs source, it advertises a single `code` tool. The agent writes one `async () => { ... }` per turn that calls `codemode.<stack>_docs(...)` and `codemode.<stack>_index()` directly, and the server runs that code in a local Node sandbox. N doc fetches collapse into one round-trip.
+Citadel is a Code Mode server: instead of advertising one tool per docs source, it advertises a single `docs` tool. The agent writes one `async () => { ... }` per turn that calls `codemode.<stack>_docs(...)` and `codemode.<stack>_index()` directly, and the server runs that code in a local Node sandbox. N doc fetches collapse into one round-trip.
 
 Each stack contributes two callable tools to the sandbox SDK:
 
@@ -161,7 +161,7 @@ Citadel also exposes a cross-stack ranked search: `codemode.docs_search({ query,
 
 ## Documentation
 
-- [Using Citadel as an AI agent](src/resources/agent-usage.ts) — playbook for the `code` tool, served at runtime as MCP resource `citadel://docs/agent-usage`. SDK reference, parallel fan-out, error handling, worked examples.
+- [Using Citadel as an AI agent](src/resources/agent-usage.ts) — playbook for the `docs` tool, served at runtime as MCP resource `citadel://docs/agent-usage`. SDK reference, parallel fan-out, error handling, worked examples.
 - [Adding a docs tool](docs/adding-a-docs-tool.md) — package a new stack as `<stack>_index` + `<stack>_docs`.
 
 ## Local Development

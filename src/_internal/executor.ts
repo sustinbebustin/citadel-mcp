@@ -1,4 +1,4 @@
-// Local Node executor for the codemode `code` tool.
+// Local Node executor for the codemode `docs` tool.
 //
 // Two load-bearing guards when editing this file:
 //   1. Sandbox `console` is shadowed via an AsyncFunction parameter so

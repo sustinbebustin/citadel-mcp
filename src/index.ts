@@ -227,7 +227,7 @@ async function createUpstream(): Promise<McpServer> {
 }
 
 const SERVER_INSTRUCTIONS = [
-  "Citadel exposes one tool, `code`. Write a single `async () => { ... }` per turn that calls the `codemode.*` SDK; the server runs it in a local Node sandbox.",
+  "Citadel exposes one tool, `docs`. Write a single `async () => { ... }` per turn that calls the `codemode.*` SDK; the server runs it in a local Node sandbox.",
   "",
   "Prefer `codemode.docs_search({ query, stacks?, fetch: true })` — one call returns ranked matches with markdown attached. Fall back to `codemode.<stack>_index()` + `codemode.<stack>_docs({ path })` for fine-grained filtering. Read the index before fetching; paths must be exact.",
   "",
@@ -298,7 +298,7 @@ async function buildCodeServer(
     }),
   );
   code.registerTool(
-    "code",
+    "docs",
     {
       description,
       inputSchema: {
