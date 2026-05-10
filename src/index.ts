@@ -14,12 +14,14 @@ import * as nextjsDocs from "./tools/nextjs-docs.js";
 import * as reactDocs from "./tools/react-docs.js";
 import * as turborepoDocs from "./tools/turborepo-docs.js";
 import * as supabaseDocs from "./tools/supabase-docs.js";
+import * as effectDocs from "./tools/effect-docs.js";
 import * as docsSearch from "./tools/docs-search.js";
 
 import * as nextjsDocsLlmsIndex from "./resources/(nextjs-docs)/llms-index.js";
 import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
 import * as turborepoDocsLlmsIndex from "./resources/(turborepo-docs)/llms-index.js";
 import * as supabaseDocsGuidesIndex from "./resources/(supabase-docs)/guides-index.js";
+import * as effectDocsLlmsIndex from "./resources/(effect-docs)/llms-index.js";
 import * as agentUsage from "./resources/agent-usage.js";
 
 import {
@@ -138,12 +140,19 @@ async function createUpstream(): Promise<McpServer> {
     supabaseDocs.inputSchema,
     supabaseDocs.handler,
   );
+  await registerDocsTool(
+    server,
+    effectDocs.metadata,
+    effectDocs.inputSchema,
+    effectDocs.handler,
+  );
 
   const indexLoaders: Record<string, () => Promise<string>> = {
     nextjs: nextjsDocsLlmsIndex.handler,
     react: reactDocsLlmsIndex.handler,
     turborepo: turborepoDocsLlmsIndex.handler,
     supabase: supabaseDocsGuidesIndex.handler,
+    effect: effectDocsLlmsIndex.handler,
   };
   const stackDocsHandlers: Record<
     string,
@@ -153,6 +162,7 @@ async function createUpstream(): Promise<McpServer> {
     react: (args) => reactDocs.handler(args),
     turborepo: (args) => turborepoDocs.handler(args),
     supabase: (args) => supabaseDocs.handler(args),
+    effect: (args) => effectDocs.handler(args),
   };
   const knownStacks = Object.keys(indexLoaders);
 
@@ -204,6 +214,13 @@ async function createUpstream(): Promise<McpServer> {
     "Supabase guides",
     "supabase_docs",
     supabaseDocsGuidesIndex,
+  );
+  registerIndexTool(
+    server,
+    "effect_index",
+    "Effect (TypeScript)",
+    "effect_docs",
+    effectDocsLlmsIndex,
   );
 
   return server;
