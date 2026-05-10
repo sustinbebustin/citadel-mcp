@@ -61,6 +61,7 @@ const LLMS_LINE = /^- \[([^\]]+)\]\(([^)]+)\)(?::\s*(.+))?$/;
 // for the index row.
 const STACK_RELATIVE_BASE: Record<string, string> = {
   turborepo: "https://turborepo.dev/docs",
+  oxc: "https://oxc.rs",
 };
 
 export function parseLlmsTxt(text: string, stack: string): IndexRow[] {

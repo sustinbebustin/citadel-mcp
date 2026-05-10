@@ -15,6 +15,7 @@ import * as reactDocs from "./tools/react-docs.js";
 import * as turborepoDocs from "./tools/turborepo-docs.js";
 import * as supabaseDocs from "./tools/supabase-docs.js";
 import * as effectDocs from "./tools/effect-docs.js";
+import * as oxcDocs from "./tools/oxc-docs.js";
 import * as tanstackStartDocs from "./tools/tanstack-start-docs.js";
 import * as tanstackRouterDocs from "./tools/tanstack-router-docs.js";
 import * as tanstackQueryDocs from "./tools/tanstack-query-docs.js";
@@ -25,6 +26,7 @@ import * as reactDocsLlmsIndex from "./resources/(react-docs)/llms-index.js";
 import * as turborepoDocsLlmsIndex from "./resources/(turborepo-docs)/llms-index.js";
 import * as supabaseDocsGuidesIndex from "./resources/(supabase-docs)/guides-index.js";
 import * as effectDocsLlmsIndex from "./resources/(effect-docs)/llms-index.js";
+import * as oxcDocsLlmsIndex from "./resources/(oxc-docs)/llms-index.js";
 import * as tanstackStartDocsIndex from "./resources/(tanstack-start-docs)/sitemap-index.js";
 import * as tanstackRouterDocsIndex from "./resources/(tanstack-router-docs)/sitemap-index.js";
 import * as tanstackQueryDocsIndex from "./resources/(tanstack-query-docs)/sitemap-index.js";
@@ -154,6 +156,12 @@ async function createUpstream(): Promise<McpServer> {
   );
   await registerDocsTool(
     server,
+    oxcDocs.metadata,
+    oxcDocs.inputSchema,
+    oxcDocs.handler,
+  );
+  await registerDocsTool(
+    server,
     tanstackStartDocs.metadata,
     tanstackStartDocs.inputSchema,
     tanstackStartDocs.handler,
@@ -177,6 +185,7 @@ async function createUpstream(): Promise<McpServer> {
     turborepo: turborepoDocsLlmsIndex.handler,
     supabase: supabaseDocsGuidesIndex.handler,
     effect: effectDocsLlmsIndex.handler,
+    oxc: oxcDocsLlmsIndex.handler,
     tanstack_start: tanstackStartDocsIndex.handler,
     tanstack_router: tanstackRouterDocsIndex.handler,
     tanstack_query: tanstackQueryDocsIndex.handler,
@@ -190,6 +199,7 @@ async function createUpstream(): Promise<McpServer> {
     turborepo: (args) => turborepoDocs.handler(args),
     supabase: (args) => supabaseDocs.handler(args),
     effect: (args) => effectDocs.handler(args),
+    oxc: (args) => oxcDocs.handler(args),
     tanstack_start: (args) => tanstackStartDocs.handler(args),
     tanstack_router: (args) => tanstackRouterDocs.handler(args),
     tanstack_query: (args) => tanstackQueryDocs.handler(args),
@@ -251,6 +261,13 @@ async function createUpstream(): Promise<McpServer> {
     "Effect (TypeScript)",
     "effect_docs",
     effectDocsLlmsIndex,
+  );
+  registerIndexTool(
+    server,
+    "oxc_index",
+    "Oxc (Oxlint + Oxfmt)",
+    "oxc_docs",
+    oxcDocsLlmsIndex,
   );
   registerIndexTool(
     server,
